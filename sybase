@@ -6,24 +6,11 @@ set -e
 COMMAND="$1"
 COMMAND_ARG="$2"
 
-CONTAINER_NAME=sybase-container
-
 install() {
-	OS=$(lsb_release -si)
-	if [ "${OS}" == "Ubuntu" ]; then
-		if ! type "docker" > /dev/null; then
-			DOCKER_URL=https://github.com/docker/compose/releases/download/1.4.2/docker-compose-Linux-x86_64
-			sudo wget -qO- https://get.docker.com/ | sh
-			sudo usermod -aG docker ubuntu
-			sudo -i curl -L "${DOCKER_URL}" > /usr/local/bin/docker-compose
-			chmod +x /usr/local/bin/docker-compose
-		fi
-	fi
-
 	docker pull ifnazar/sybase_15_7:v1
 }
 
-start() {
+createContainer() {
 	CURRENT_DIR="$(pwd)"
 	DOCKER_EXTERNAL_DIR=${CURRENT_DIR}/sybase_data
 	DOCKER_LOCAL_DATA=/opt/sybase/external_data
@@ -32,24 +19,28 @@ start() {
 	     mkdir -p  ${DOCKER_EXTERNAL_DIR}
 	fi
 
-	echo ">>  starting sybase docker"
-	docker run -i -t  -v ${DOCKER_EXTERNAL_DIR}:${DOCKER_LOCAL_DATA} --name "${CONTAINER_NAME}" -p 5000:5000 -h dksybase -d ifnazar/sybase_15_7:v1 bash /sybase/start >> /dev/null
-	echo ">>  sybase docker started"
+	docker run -i -t  -v ${DOCKER_EXTERNAL_DIR}:${DOCKER_LOCAL_DATA} --name sybase-container -p 5000:5000 -h dksybase -d ifnazar/sybase_15_7:v1 bash /sybase/start >> /dev/null
+}
+
+start() {
+	CURRENT_DOCKER_ID="$(docker ps -a -q --filter 'name=sybase-container')"
+	if [ -n "$CURRENT_DOCKER_ID" ]; then
+		docker start sybase-container
+		echo ">>  sybase docker started"
+	else
+		createContainer
+		echo ">>  sybase docker started"
+	fi
 }
 
 stop() {
 	CURRENT_DOCKER_ID="$(docker ps -q --filter 'name=sybase-container')"
 	if [ ! -z "$CURRENT_DOCKER_ID" ]; then
 	     echo ">>  stopping sybase docker"
-	     timeout 20 docker exec "${CONTAINER_NAME}" bash /sybase/stop >> /dev/null
+	     timeout 20 docker exec sybase-container bash /sybase/stop >> /dev/null
 	     sleep 1
-	     timeout 20 docker stop "${CONTAINER_NAME}" >> /dev/null
+	     timeout 20 docker stop sybase-container >> /dev/null
 	     sleep 1
-	fi
-
-	CURRENT_DOCKER_ID="$(docker ps -a -q --filter 'name=sybase-container')"
-	if [ ! -z "$CURRENT_DOCKER_ID" ]; then
-	     docker rm "${CONTAINER_NAME}" >> /dev/null
 	fi
 }
 
@@ -61,17 +52,24 @@ restart() {
 sql(){
 	if [ ! -z "${COMMAND_ARG}" ];  then
 	    SQL_FILE=/sybase/toRun.sql
-	    docker cp "${COMMAND_ARG}" "${CONTAINER_NAME}":"${SQL_FILE}"
+	    docker cp "${COMMAND_ARG}" sybase-container:"${SQL_FILE}"
 	    ISQL_ARGUMENT=-i"${SQL_FILE}"
 	fi
 
-	docker exec -i -t "${CONTAINER_NAME}" bash /sybase/isql "${ISQL_ARGUMENT}"
+	docker exec -i -t sybase-container bash /sybase/isql "${ISQL_ARGUMENT}"
+}
+
+run_bash(){
+	docker exec -i -t sybase-container bash
 }
 
 
 case "${COMMAND}" in
     install)
         install
+        ;;
+    bash)
+        run_bash
         ;;
     start)
         start
@@ -87,7 +85,7 @@ case "${COMMAND}" in
         ;;
 
     *)
-        echo $"Usage: $0 {install|start|stop|sql|restart}"
+        echo $"Usage: $0 {install|bash|start|stop|sql|restart}"
         exit 1
 esac
 exit 0
