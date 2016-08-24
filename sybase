@@ -7,19 +7,11 @@ COMMAND="$1"
 COMMAND_ARG="$2"
 
 install() {
-	docker pull ifnazar/sybase_15_7:v1
+	docker pull ifnazar/sybase_15_7
 }
 
 createContainer() {
-	CURRENT_DIR="$(pwd)"
-	DOCKER_EXTERNAL_DIR=${CURRENT_DIR}/sybase_data
-	DOCKER_LOCAL_DATA=/opt/sybase/external_data
-
-	if [ ! -d "$DIRECTORY" ]; then
-	     mkdir -p  ${DOCKER_EXTERNAL_DIR}
-	fi
-
-	docker run -i -t  -v ${DOCKER_EXTERNAL_DIR}:${DOCKER_LOCAL_DATA} --name sybase-container -p 5000:5000 -h dksybase -d ifnazar/sybase_15_7:v1 bash /sybase/start >> /dev/null
+	docker run -i -t  --name sybase-container -p 5000:5000 -h dksybase -d ifnazar/sybase_15_7 bash /sybase/start >> /dev/null
 }
 
 start() {
